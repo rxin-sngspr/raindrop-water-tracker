@@ -1,0 +1,77 @@
+# Flutter/Dart
+**/doc/api/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+build/
+coverage/
+*.freezed.dart
+*.g.dart
+
+# Android
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/.gradle/
+/android/local.properties
+/android/key.properties
+*.jks
+*.keystore
+
+# iOS
+/ios/Flutter/.last_build_id
+/ios/Flutter/Flutter.podspec
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/App.framework
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/ephemeral/
+/ios/ServiceDefinitions.json
+
+# Web
+/web/manifest.json
+
+# Windows
+/windows/flutter/ephemeral/
+/windows/flutter/generated_*
+/windows/runner/flutter_window.h
+/windows/runner/main.cpp
+/windows/runner/utils.h
+/windows/runner/utils.cpp
+/windows/runner/win32_window.h
+/windows/runner/win32_window.cpp
+/windows/runner/Runner.rc
+/windows/runner/resources/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.atom/
+.swiftpm/
+
+# OS
+.DS_Store
+*.swp
+*.lock
+*.log
+*.pyc
+*.class
+Thumbs.db
+
+# Symbolication
+app.*.symbols
+app.*.map.json
+
+# Miscellaneous
+.history
+.build/
+.buildlog/
+.svn/
+migrate_working_dir/

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'core/constants/app_constants.dart';
 import 'data/repositories/water_repository.dart';
 import 'features/home/home_screen.dart';
 import 'features/history/history_screen.dart';
+import 'features/achievements/achievements_screen.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'features/settings/settings_screen.dart';
 
 class RainDropApp extends ConsumerWidget {
@@ -15,14 +16,13 @@ class RainDropApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
-    final lightAccent = ref.watch(lightAccentProvider);
-    final darkAccent = ref.watch(darkAccentProvider);
+    final themes = ref.watch(appThemeProvider);
 
     return MaterialApp(
-      title: 'RainDrop',
+      title: 'Rain Drop',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightThemeFor(lightAccent),
-      darkTheme: AppTheme.darkThemeFor(darkAccent),
+      theme: themes.light,
+      darkTheme: themes.dark,
       themeMode: themeMode,
       home: const _MainShell(),
     );
@@ -43,6 +43,7 @@ class _MainShellState extends ConsumerState<_MainShell> {
   final _screens = const [
     HomeScreen(),
     HistoryScreen(),
+    AchievementsScreen(),
     SettingsScreen(),
   ];
 
@@ -65,12 +66,12 @@ class _MainShellState extends ConsumerState<_MainShell> {
     }
   }
 
-  void _showNameDialog() {
+  Future<void> _showNameDialog() async {
     final controller = TextEditingController();
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    showDialog(
+    await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
@@ -86,12 +87,12 @@ class _MainShellState extends ConsumerState<_MainShell> {
                 color: colorScheme.primaryContainer,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.water_drop,
+              child: Icon(LucideIcons.droplet,
                   color: colorScheme.primary, size: 32),
             ),
             const SizedBox(height: 16),
             Text(
-              'Welcome to RainDrop',
+              'Welcome to Rain Drop',
               style: theme.textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
@@ -119,7 +120,7 @@ class _MainShellState extends ConsumerState<_MainShell> {
                 labelText: 'Your name',
                 hintText: 'Enter your name',
                 counterText: '',
-                prefixIcon: const Icon(Icons.person_outline),
+                prefixIcon: const Icon(LucideIcons.user),
               ),
               onSubmitted: (value) {
                 if (value.trim().isNotEmpty) {
@@ -145,7 +146,7 @@ class _MainShellState extends ConsumerState<_MainShell> {
                     Navigator.pop(ctx);
                   }
                 },
-                icon: const Icon(Icons.arrow_forward, size: 18),
+                icon: const Icon(LucideIcons.arrowRight, size: 18),
                 label: const Text('Get Started'),
               ),
             ),
@@ -153,37 +154,71 @@ class _MainShellState extends ConsumerState<_MainShell> {
         ],
       ),
     );
+    controller.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final reducedMotion = MediaQuery.of(context).accessibleNavigation;
+
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
+      body: AnimatedSwitcher(
+        duration: reducedMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 150),
+        switchInCurve: Curves.easeOutBack,
+        switchOutCurve: Curves.easeIn,
+        transitionBuilder: (child, animation) {
+          if (reducedMotion) return child;
+          return FadeTransition(
+            opacity: animation,
+            child: child,
+          );
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.water_drop_outlined),
-            selectedIcon: Icon(Icons.water_drop),
-            label: 'Today',
+        child: KeyedSubtree(
+          key: ValueKey(_currentIndex),
+          child: _screens[_currentIndex],
+        ),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: theme.dividerTheme.color ?? Colors.transparent,
+              width: 0.5,
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
-            label: 'History',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
+        ),
+        child: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (index) {
+            setState(() => _currentIndex = index);
+          },
+          height: 72,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(LucideIcons.droplets),
+              selectedIcon: Icon(LucideIcons.droplet),
+              label: 'Today',
+            ),
+            NavigationDestination(
+              icon: Icon(LucideIcons.barChart),
+              selectedIcon: Icon(LucideIcons.barChart),
+              label: 'History',
+            ),
+            NavigationDestination(
+              icon: Icon(LucideIcons.trophy),
+              selectedIcon: Icon(LucideIcons.trophy),
+              label: 'Badges',
+            ),
+            NavigationDestination(
+              icon: Icon(LucideIcons.settings),
+              selectedIcon: Icon(LucideIcons.settings),
+              label: 'Settings',
+            ),
+          ],
+        ),
       ),
     );
   }

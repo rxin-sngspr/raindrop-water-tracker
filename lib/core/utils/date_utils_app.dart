@@ -35,7 +35,7 @@ class DateUtilsApp {
   }
 
   static DateTime endOfDay(DateTime date) {
-    return DateTime(date.year, date.month, date.day, 23, 59, 59);
+    return DateTime(date.year, date.month, date.day, 23, 59, 59, 999);
   }
 
   static int daysInMonth(int year, int month) {
@@ -51,12 +51,4 @@ class DateUtilsApp {
     return days;
   }
 
-  static String timeAgo(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return formatDate(date);
-  }
 }

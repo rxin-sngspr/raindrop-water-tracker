@@ -1,38 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import '../constants/app_constants.dart';
+import '../../data/storage/hive_storage.dart';
+import '../../data/repositories/water_repository.dart';
 import 'app_theme.dart';
 
-// --- Base theme mode (system / light / dark) ---
-final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
-  return ThemeModeNotifier();
-});
+/// Holds both light and dark ThemeData for MaterialApp.
+class AppThemePair {
+  final ThemeData light;
+  final ThemeData dark;
+  const AppThemePair({required this.light, required this.dark});
+}
 
-// --- Accent selection ---
-final lightAccentProvider = StateNotifierProvider<LightAccentNotifier, LightAccent>((ref) {
-  return LightAccentNotifier();
-});
-
-final darkAccentProvider = StateNotifierProvider<DarkAccentNotifier, DarkAccent>((ref) {
-  return DarkAccentNotifier();
+/// Provides the current theme mode (light / dark / system).
+final themeModeProvider =
+    StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
+  final storage = ref.watch(storageProvider);
+  return ThemeModeNotifier(storage);
 });
 
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
-  ThemeModeNotifier() : super(ThemeMode.system) {
+  final HiveStorage _storage;
+
+  ThemeModeNotifier(this._storage) : super(ThemeMode.system) {
     _load();
   }
 
-  Future<void> _load() async {
-    final box = await Hive.openBox(AppConstants.hiveSettingsBox);
-    final saved = box.get('themeMode', defaultValue: 'system');
+  void _load() {
+    final saved = _storage.getThemeMode();
     state = _fromString(saved);
   }
 
   Future<void> setTheme(ThemeMode mode) async {
     state = mode;
-    final box = await Hive.openBox(AppConstants.hiveSettingsBox);
-    await box.put('themeMode', _toString(mode));
+    await _storage.setThemeMode(_toString(mode));
   }
 
   ThemeMode _fromString(String value) {
@@ -58,105 +58,40 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   }
 }
 
-class LightAccentNotifier extends StateNotifier<LightAccent> {
-  LightAccentNotifier() : super(LightAccent.blue) {
+/// Provides the current theme preset (pink / purple / purpink / serenity).
+final themePresetProvider =
+    StateNotifierProvider<ThemePresetNotifier, String>((ref) {
+  final storage = ref.watch(storageProvider);
+  return ThemePresetNotifier(storage);
+});
+
+class ThemePresetNotifier extends StateNotifier<String> {
+  final HiveStorage _storage;
+
+  ThemePresetNotifier(this._storage) : super(AppThemePresets.purple) {
     _load();
   }
 
-  Future<void> _load() async {
-    final box = await Hive.openBox(AppConstants.hiveSettingsBox);
-    final saved = box.get('lightAccent', defaultValue: 'blue');
-    state = _fromString(saved);
-  }
-
-  Future<void> setAccent(LightAccent accent) async {
-    state = accent;
-    final box = await Hive.openBox(AppConstants.hiveSettingsBox);
-    await box.put('lightAccent', _toString(accent));
-  }
-
-  LightAccent _fromString(String value) {
-    switch (value) {
-      case 'lavender':
-        return LightAccent.lavender;
-      case 'sand':
-        return LightAccent.sand;
-      default:
-        return LightAccent.blue;
+  void _load() {
+    final saved = _storage.getThemePreset();
+    if (AppThemePresets.all.contains(saved)) {
+      state = saved;
     }
   }
 
-  String _toString(LightAccent accent) {
-    switch (accent) {
-      case LightAccent.blue:
-        return 'blue';
-      case LightAccent.lavender:
-        return 'lavender';
-      case LightAccent.sand:
-        return 'sand';
+  Future<void> setPreset(String preset) async {
+    if (AppThemePresets.all.contains(preset)) {
+      state = preset;
+      await _storage.setThemePreset(preset);
     }
   }
 }
 
-class DarkAccentNotifier extends StateNotifier<DarkAccent> {
-  DarkAccentNotifier() : super(DarkAccent.navy) {
-    _load();
-  }
-
-  Future<void> _load() async {
-    final box = await Hive.openBox(AppConstants.hiveSettingsBox);
-    final saved = box.get('darkAccent', defaultValue: 'navy');
-    state = _fromString(saved);
-  }
-
-  Future<void> setAccent(DarkAccent accent) async {
-    state = accent;
-    final box = await Hive.openBox(AppConstants.hiveSettingsBox);
-    await box.put('darkAccent', _toString(accent));
-  }
-
-  DarkAccent _fromString(String value) {
-    switch (value) {
-      case 'black':
-        return DarkAccent.black;
-      case 'charcoal':
-        return DarkAccent.charcoal;
-      case 'maroon':
-        return DarkAccent.maroon;
-      default:
-        return DarkAccent.navy;
-    }
-  }
-
-  String _toString(DarkAccent accent) {
-    switch (accent) {
-      case DarkAccent.navy:
-        return 'navy';
-      case DarkAccent.black:
-        return 'black';
-      case DarkAccent.charcoal:
-        return 'charcoal';
-      case DarkAccent.maroon:
-        return 'maroon';
-    }
-  }
-}
-
-// --- Theme data provider (resolves both base mode and accent) ---
-final themeDataProvider = Provider<ThemeData>((ref) {
-  final mode = ref.watch(themeModeProvider);
-  final lightAccent = ref.watch(lightAccentProvider);
-  final darkAccent = ref.watch(darkAccentProvider);
-
-  final isDark = switch (mode) {
-    ThemeMode.dark => true,
-    ThemeMode.light => false,
-    ThemeMode.system => WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark,
-  };
-
-  if (isDark) {
-    return AppTheme.darkThemeFor(darkAccent);
-  } else {
-    return AppTheme.lightThemeFor(lightAccent);
-  }
+/// Provides both light and dark themes, watching the current preset.
+final appThemeProvider = Provider<AppThemePair>((ref) {
+  final preset = ref.watch(themePresetProvider);
+  return AppThemePair(
+    light: AppTheme.light(preset: preset),
+    dark: AppTheme.dark(preset: preset),
+  );
 });

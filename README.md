@@ -1,8 +1,8 @@
-# RainDrop
+# Rain Drop
 
-> Your daily hydration companion. Track, visualize, and stay on top of your water intake.
+> Your daily hydration tracker. Track, visualize, and stay on top of your water intake.
 
-A cross-platform Flutter water intake tracker with Material Design 3, dark/light mode with multiple accent colors, interactive progress ring, monthly bar charts, Android home screen widget, and daily hydration reminders.
+A cross-platform Flutter water intake tracker with Material Design 3, dark/light mode, interactive progress ring, monthly bar charts, streak tracking, achievements, and daily hydration reminders.
 
 ---
 
@@ -14,32 +14,34 @@ A cross-platform Flutter water intake tracker with Material Design 3, dark/light
 - **Personalized greeting** -- Enter your name on first launch for a tailored experience
 - **Undo last entry** -- Mistaken tap? Undo your last logged entry instantly
 - **Daily goal management** -- Adjustable slider from 500ml to 5000ml
+- **Streak tracking** -- Consecutive day streaks with visual banner
 
 ### History & Analytics
 - **Monthly bar charts** -- Visualize your hydration patterns with fl_chart
 - **Goal line overlay** -- Dashed line on charts showing your daily target
 - **Average daily intake** -- See your average consumption across tracked days
 - **Daily notes** -- Tap any day on the chart to add or edit personal notes
-- **Color-coded bars** -- Green bars for goal-reached days, blue for below goal
+- **Color-coded bars** -- Green bars for goal-reached days, teal for below goal
+
+### Achievements
+- **12 unlockable badges** -- Streak, volume, and consistency milestones
+- **Progress tracking** -- See how close you are to the next badge
+- **Streak display** -- Current and longest streaks shown on home and badges screens
 
 ### Themes & Appearance
-- **Material Design 3** -- Modern UI with dynamic color schemes
+- **Material Design 3** -- Modern UI with ColorScheme.fromSeed()
 - **Dark / Light / System mode** -- Follow your system preference or choose manually
-- **Light mode accents** -- Default Blue, Soft Lavender, Warm Sand
-- **Dark mode accents** -- Deep Navy, Midnight Black, Charcoal, Maroon
-- **Custom typography** -- Inter font family for clean readability
+- **Custom typography** -- Plus Jakarta Sans headings + Inter body
 - **Animated transitions** -- Smooth entry animations for water log tiles
+- **Unified color palette** -- Teal seed color across both themes
 
 ### Platform Features
-- **Android home screen widget** -- Check your progress without opening the app
-- **Daily reminders** -- Morning and evening motivational notifications
+- **Daily reminders** -- 7 AM, 2 PM, 8 PM smart notifications
 - **Cross-platform** -- Android, iOS, Windows, and Web from a single codebase
 
-### Data & Feedback
+### Data
 - **Local storage** -- All data persisted locally via Hive (no account needed)
-- **Feedback system** -- Send star ratings and comments via Formspree
-- **Reset data** -- Clear all history with a single tap
-- **Input validation** -- Smart limits on names, entry amounts, and daily totals
+- **Reset data** -- Clear all history, streak, and achievements with a single tap
 
 ---
 
@@ -52,9 +54,7 @@ A cross-platform Flutter water intake tracker with Material Design 3, dark/light
 | Local Storage | Hive + hive_flutter |
 | Charts | fl_chart |
 | Local Notifications | flutter_local_notifications |
-| Home Widget | home_widget (Android) |
-| Typography | Google Fonts (Inter) |
-| HTTP Client | http (Formspree feedback) |
+| Typography | Google Fonts (Plus Jakarta Sans + Inter) |
 | Android | Kotlin, Android SDK 34+ |
 | iOS | Swift, iOS 12+ |
 | Windows | C++ via Flutter desktop |
@@ -71,16 +71,17 @@ lib/
   core/           -- Shared infrastructure
     constants/    -- App-wide constants
     services/     -- Notifications, widget updates
-    theme/        -- MD3 themes, color palettes
+    theme/        -- MD3 themes, design tokens
     utils/        -- Date formatting helpers
   data/
-    models/       -- Data entities (WaterEntry)
+    models/       -- Data entities (WaterEntry, Streak, Achievement)
     repositories/ -- Riverpod providers, business logic
     storage/      -- Hive persistence layer
   features/
-    home/         -- Today's intake, progress ring, quick add
+    home/         -- Today's intake, progress ring, quick add, streak
     history/      -- Monthly charts, daily notes, averages
-    settings/     -- Name, goal, theme, feedback, data management
+    achievements/ -- Badge grid, streak display
+    settings/     -- Profile, theme, notifications, data management
   shared/
     widgets/      -- Reusable UI components
   app.dart        -- App shell with navigation
@@ -89,16 +90,10 @@ lib/
 
 ### Data Flow
 
-1. **HiveStorage** handles all local persistence (entries, settings, notes)
+1. **HiveStorage** handles all local persistence (entries, settings, notes, streak, achievements)
 2. **Riverpod providers** expose reactive state to the UI layer
 3. **Widgets** consume providers and rebuild automatically on state changes
-4. **Notifications** and **widget updates** are triggered through dedicated service classes
-
----
-
-## Screenshots
-
-Screenshots and demo videos are available on the [project portfolio page](https://rxin-sngspr.github.io/johnsangaspar-portfolio/work.html).
+4. **Notifications** are triggered through dedicated service classes
 
 ---
 
@@ -117,7 +112,7 @@ Screenshots and demo videos are available on the [project portfolio page](https:
 git clone https://github.com/rxin-sngspr/raindrop-water-tracker.git
 
 # Navigate to the project
-cd raindrop-water-tracker
+cd rain_drop
 
 # Install dependencies
 flutter pub get
@@ -146,7 +141,7 @@ flutter build windows --release
 
 ## About the Developer
 
-Built by [John Pheter San Gaspar](https://rxin-sngspr.github.io/johnsangaspar-portfolio/), an Executive Operations Partner and full-stack developer based in the Philippines. John combines operational excellence with technical craftsmanship to build tools that make daily life better.
+Built by [John Pheter San Gaspar](https://rxin-sngspr.github.io/johnsangaspar-portfolio/), an Executive Operations Partner and full-stack developer based in the Philippines.
 
 - Portfolio: [rxin-sngspr.github.io/johnsangaspar-portfolio](https://rxin-sngspr.github.io/johnsangaspar-portfolio/)
 - LinkedIn: [linkedin.com/in/ea-johnsngspr](https://linkedin.com/in/ea-johnsngspr)

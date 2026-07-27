@@ -2,8 +2,16 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../data/models/water_entry.dart';
 import '../../data/repositories/water_repository.dart';
+import '../../core/constants/app_constants.dart';
+import '../../core/theme/app_dimensions.dart';
 import '../../core/utils/date_utils_app.dart';
+import '../../shared/widgets/rain_page_header.dart';
+import '../../shared/widgets/rain_card.dart';
+import '../../shared/widgets/rain_empty_state.dart';
+import '../../shared/widgets/rain_stat_card.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
@@ -20,21 +28,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   void initState() {
     super.initState();
     _currentMonth = DateTime(DateTime.now().year, DateTime.now().month);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Auto-refresh month data when today's data changes
-    ref.listen(todayProvider, (previous, next) {
+    ref.listenManual(todayProvider, (previous, next) {
       if (previous != null && next.total != previous.total) {
         ref.invalidate(monthProvider(_currentMonth));
       }
     });
+  }
 
+  @override
+  Widget build(BuildContext context) {
     final entries = ref.watch(monthProvider(_currentMonth));
     final today = ref.watch(todayProvider);
+    final quickAddAmounts = ref.watch(quickAddProvider);
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final cs = theme.colorScheme;
     final days = DateUtilsApp.getDaysInMonth(
       _currentMonth.year,
       _currentMonth.month,
@@ -52,73 +59,80 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final goal = today.goal;
     final hasData = dailyTotals.values.any((v) => v > 0);
 
-    // Calculate average daily intake
     final daysWithData = dailyTotals.values.where((v) => v > 0).length;
     final totalAllDays = dailyTotals.values.fold(0, (a, b) => a + b);
-    final avgIntake = daysWithData > 0 ? (totalAllDays / daysWithData).round() : 0;
-
-    // Generate advice line
-    final advice = _getAdvice(avgIntake, goal);
+    final avgIntake =
+        daysWithData > 0 ? (totalAllDays / daysWithData).round() : 0;
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showBackfillDialog(context, quickAddAmounts),
+        icon: const Icon(LucideIcons.calendarRange, size: 20),
+        label: const Text('Log past date'),
+      ),
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                padding: EdgeInsets.fromLTRB(
+                  AppDimensions.pageH,
+                  AppDimensions.pageV,
+                  AppDimensions.pageH,
+                  0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('History', style: theme.textTheme.headlineLarge),
-                    const SizedBox(height: 20),
+                    RainPageHeader(
+                      title: 'History',
+                      subtitle: hasData
+                          ? '$daysWithData day${daysWithData == 1 ? '' : 's'} logged this month'
+                          : null,
+                    ),
+                    SizedBox(height: AppDimensions.sectionGap),
 
-                    // Summary card with average + advice
+                    // Summary stat card
                     if (hasData)
-                      _SummaryCard(
-                        avgIntake: avgIntake,
-                        goal: goal,
-                        advice: advice,
-                        daysTracked: daysWithData,
-                      ),
-                    if (hasData) const SizedBox(height: 12),
-
-                    // Month selector with chart
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+                      RainStatCard(
+                        value: '$avgIntake',
+                        unit: 'ml',
+                        label: 'Average daily intake',
+                        badge: _buildPercentageBadge(
+                          context,
+                          avgIntake,
+                          goal,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 20,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
                       ),
+                    if (hasData)
+                      SizedBox(height: AppDimensions.sectionGap),
+
+                    // Month selector + chart
+                    RainCard(
                       child: Column(
                         children: [
+                          // Month navigation
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               IconButton(
-                                icon: Icon(Icons.chevron_left_rounded),
+                                icon: Icon(LucideIcons.chevronLeft),
                                 onPressed: () => setState(() {
-                                  _currentMonth = DateTime(
+                                  final prev = DateTime(
                                     _currentMonth.year,
                                     _currentMonth.month - 1,
                                   );
-                                  _selectedDay = null;
+                                  if (!prev.isBefore(DateTime(2024))) {
+                                    _currentMonth = prev;
+                                    _selectedDay = null;
+                                  }
                                 }),
                                 style: IconButton.styleFrom(
-                                  backgroundColor:
-                                      colorScheme.primaryContainer,
+                                  backgroundColor: cs.primaryContainer,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(
+                                      AppDimensions.radiusLg,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -129,7 +143,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                 ),
                               ),
                               IconButton(
-                                icon: Icon(Icons.chevron_right_rounded),
+                                icon: Icon(LucideIcons.chevronRight),
                                 onPressed: () {
                                   final next = DateTime(
                                     _currentMonth.year,
@@ -143,37 +157,34 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                   }
                                 },
                                 style: IconButton.styleFrom(
-                                  backgroundColor:
-                                      colorScheme.primaryContainer,
+                                  backgroundColor: cs.primaryContainer,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(
+                                      AppDimensions.radiusLg,
+                                    ),
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 20),
+                          SizedBox(height: AppDimensions.sectionGap),
 
                           // Chart
                           SizedBox(
-                            height: 200,
+                            height: 280,
                             child: hasData
                                 ? BarChart(
                                     BarChartData(
                                       alignment:
                                           BarChartAlignment.spaceAround,
-                                      maxY: max(
-                                        (maxTotal * 1.2).clamp(
-                                            goal.toDouble(), double.infinity),
-                                        goal * 1.3,
-                                      ),
+                                      maxY: _niceMaxY(
+                                          maxTotal.toDouble(), goal),
                                       barTouchData: BarTouchData(
                                         enabled: true,
                                         touchTooltipData:
                                             BarTouchTooltipData(
                                           tooltipMargin: 4,
-                                          getTooltipColor: (_) =>
-                                              colorScheme.surface,
+                                          getTooltipColor: (_) => cs.surface,
                                           getTooltipItem:
                                               (group, groupIndex, rod,
                                                   rodIndex) {
@@ -182,8 +193,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                             return BarTooltipItem(
                                               '${DateUtilsApp.formatShortDay(day)}\n${rod.toY.toInt()} ml',
                                               TextStyle(
-                                                color: colorScheme
-                                                    .onSurface,
+                                                color: cs.onSurface,
                                                 fontWeight: FontWeight.w600,
                                                 fontSize: 12,
                                               ),
@@ -213,25 +223,24 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                               final index = value.toInt();
                                               if (index < 0 ||
                                                   index >= days.length) {
-                                                return const SizedBox
-                                                    .shrink();
+                                                return const SizedBox.shrink();
                                               }
                                               if (days[index].day % 5 !=
                                                       0 &&
                                                   days[index].day != 1) {
-                                                return const SizedBox
-                                                    .shrink();
+                                                return const SizedBox.shrink();
                                               }
                                               return Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 4),
+                                                padding:
+                                                    const EdgeInsets.only(
+                                                        top: 4),
                                                 child: Text(
                                                   '${days[index].day}',
                                                   style: TextStyle(
                                                     fontSize: 10,
                                                     fontWeight:
                                                         FontWeight.w600,
-                                                    color: colorScheme
+                                                    color: cs
                                                         .onSurfaceVariant,
                                                   ),
                                                 ),
@@ -243,21 +252,26 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                         leftTitles: AxisTitles(
                                           sideTitles: SideTitles(
                                             showTitles: true,
-                                            reservedSize: 34,
+                                            reservedSize: 48,
+                                            interval: _intervalFor(
+                                                _niceMaxY(
+                                                    maxTotal.toDouble(),
+                                                    goal)),
                                             getTitlesWidget: (value, meta) {
                                               if (value == 0) {
-                                                return const SizedBox
-                                                    .shrink();
+                                                return const SizedBox.shrink();
                                               }
                                               return Padding(
-                                                padding: const EdgeInsets.only(
-                                                    right: 4),
+                                                padding:
+                                                    const EdgeInsets.only(
+                                                        right: 4),
                                                 child: Text(
                                                   '${value.toInt()}',
                                                   style: TextStyle(
                                                     fontSize: 10,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: colorScheme
+                                                    fontWeight:
+                                                        FontWeight.w500,
+                                                    color: cs
                                                         .onSurfaceVariant,
                                                   ),
                                                 ),
@@ -277,12 +291,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                       borderData: FlBorderData(show: false),
                                       gridData: FlGridData(
                                         show: true,
-                                        horizontalInterval:
-                                            goal > 0 ? goal / 2 : 500,
+                                        horizontalInterval: _intervalFor(
+                                            _niceMaxY(
+                                                maxTotal.toDouble(), goal)),
                                         drawVerticalLine: false,
                                         getDrawingHorizontalLine: (value) =>
                                             FlLine(
-                                          color: colorScheme.outlineVariant
+                                          color: cs.outlineVariant
                                               .withValues(alpha: 0.2),
                                           strokeWidth: 1,
                                         ),
@@ -291,16 +306,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                         horizontalLines: [
                                           HorizontalLine(
                                             y: goal.toDouble(),
-                                            color: colorScheme.tertiary,
+                                            color: cs.tertiary,
                                             strokeWidth: 1.5,
                                             dashArray: [8, 4],
                                             label: HorizontalLineLabel(
                                               show: true,
-                                              alignment: Alignment.topRight,
                                               style: TextStyle(
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w600,
-                                                color: colorScheme.tertiary,
+                                                color: cs.tertiary,
                                               ),
                                               labelResolver: (_) =>
                                                   'Goal ${goal}ml',
@@ -312,123 +326,72 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                           days.asMap().entries.map((entry) {
                                         final day = entry.value;
                                         final total = dailyTotals[day] ?? 0;
-                                        final isSelected = _selectedDay != null &&
-                                            DateUtilsApp.isSameDay(
-                                                day, _selectedDay!);
-                                        final reached =
-                                            total >= goal;
+                                        final reached = total >= goal;
                                         return BarChartGroupData(
                                           x: entry.key,
                                           barRods: [
                                             BarChartRodData(
                                               toY: total.toDouble(),
                                               color: reached
-                                                  ? const Color(0xFF30D158)
-                                                  : (isSelected
-                                                      ? colorScheme.tertiary
-                                                      : colorScheme.primary),
-                                              width:
-                                                  days.length > 25 ? 5 : 8,
+                                                  ? cs.tertiary
+                                                  : cs.primary,
+                                              width: 5,
                                               borderRadius:
                                                   const BorderRadius.only(
                                                 topLeft: Radius.circular(3),
-                                                topRight: Radius.circular(3),
+                                                topRight:
+                                                    Radius.circular(3),
                                               ),
-                                              gradient: reached
-                                                  ? LinearGradient(
-                                                      begin: Alignment
-                                                          .topCenter,
-                                                      end: Alignment
-                                                          .bottomCenter,
-                                                      colors: [
-                                                        const Color(
-                                                            0xFF30D158),
-                                                        const Color(
-                                                            0xFF2BC44F),
-                                                      ],
-                                                    )
-                                                  : null,
                                             ),
                                           ],
                                         );
                                       }).toList(),
                                     ),
                                   )
-                                : Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: colorScheme.primaryContainer,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Icon(
-                                            Icons.bar_chart_outlined,
-                                            size: 36,
-                                            color: colorScheme.primary
-                                                .withValues(alpha: 0.5),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Text(
-                                          'No data for this month',
-                                          style: theme.textTheme.bodyLarge
-                                              ?.copyWith(
-                                            color: colorScheme
-                                                .onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                : RainEmptyState(
+                                    icon: LucideIcons.barChart,
+                                    title: 'No data for this month',
+                                    message:
+                                        'Start logging water to see your history',
                                   ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: AppDimensions.sectionGap),
 
                     // Legend
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: colorScheme.outlineVariant.withValues(alpha: 0.4),
-                        ),
-                      ),
+                    RainCard(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           _Legend(
-                            color: colorScheme.primary,
+                            color: cs.primary,
                             label: 'Below goal',
                           ),
-                          const SizedBox(width: 20),
+                          SizedBox(width: AppDimensions.sp5),
                           _Legend(
-                            color: const Color(0xFF30D158),
+                            color: cs.tertiary,
                             label: 'Goal met',
                           ),
-                          const SizedBox(width: 20),
+                          SizedBox(width: AppDimensions.sp5),
                           _DashedLegend(
-                            color: colorScheme.tertiary,
+                            color: cs.tertiary,
                             label: 'Goal line',
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    SizedBox(height: AppDimensions.sectionGap),
 
-                    // Daily notes section (when a day is selected)
+                    // Daily note section
                     if (_selectedDay != null)
                       _DailyNoteCard(
                         date: _selectedDay!,
                         dayTotal: dailyTotals[_selectedDay] ?? 0,
                         goal: goal,
                       ),
-                    const SizedBox(height: 32),
+                    SizedBox(height: AppDimensions.sp8),
                   ],
                 ),
               ),
@@ -439,121 +402,264 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     );
   }
 
-  String _getAdvice(int avg, int goal) {
-    if (avg == 0) return 'Start logging to see your habits';
-    final ratio = avg / goal;
-    if (ratio >= 1.0) return 'You are meeting your daily goal. Keep it up!';
-    if (ratio >= 0.75) return 'Almost there! Just a bit more to reach your goal.';
-    if (ratio >= 0.5) return 'You are below the recommended intake. Try to drink more.';
-    return 'You are significantly below your hydration goal. Time to step it up!';
-  }
-}
-
-// --- Summary Card ---
-class _SummaryCard extends StatelessWidget {
-  final int avgIntake;
-  final int goal;
-  final String advice;
-  final int daysTracked;
-
-  const _SummaryCard({
-    required this.avgIntake,
-    required this.goal,
-    required this.advice,
-    required this.daysTracked,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  Widget _buildPercentageBadge(
+      BuildContext context, int avgIntake, int goal) {
+    final cs = Theme.of(context).colorScheme;
     final ratio = goal > 0 ? (avgIntake / goal) : 0.0;
-
+    final pct = (ratio * 100).toInt();
+    final badgeColor = ratio >= 1 ? cs.tertiary : cs.primary;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            colorScheme.primary.withValues(alpha: 0.08),
-            colorScheme.secondary.withValues(alpha: 0.04),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.primary.withValues(alpha: 0.1),
-        ),
+        color: badgeColor.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(14),
+      child: Text(
+        '$pct%',
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: badgeColor,
             ),
-            child: Icon(
-              Icons.trending_up,
-              color: colorScheme.primary,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Avg $avgIntake ml',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: ratio >= 1
-                            ? const Color(0xFF30D158).withValues(alpha: 0.15)
-                            : colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${(ratio * 100).toInt()}%',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: ratio >= 1
-                              ? const Color(0xFF30D158)
-                              : colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  advice,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '$daysTracked day${daysTracked == 1 ? '' : 's'} logged',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
+  }
+
+  double _niceMaxY(double maxTotal, int goal) {
+    final rawMax = max(maxTotal, goal.toDouble());
+    final withHeadroom = rawMax * 1.2;
+    return ((withHeadroom / 500).ceil() * 500).toDouble();
+  }
+
+  double _intervalFor(double maxY) {
+    if (maxY <= 1000) return 250;
+    if (maxY <= 3000) return 500;
+    return 1000;
+  }
+
+  Future<void> _showBackfillDialog(
+      BuildContext context, List<int> quickAmounts) async {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    DateTime selectedDate = DateTime.now();
+    int selectedAmount = quickAmounts.isNotEmpty ? quickAmounts.first : 200;
+    final amountController = TextEditingController();
+    bool useCustomAmount = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: cs.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child:
+                    Icon(LucideIcons.calendarRange, color: cs.primary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('Log water for past date',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Date picker row
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: selectedDate,
+                      firstDate: DateTime(2024),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setDialogState(() => selectedDate = picked);
+                    }
+                  },
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.calendar,
+                          size: 18, color: cs.primary),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          DateUtilsApp.formatDate(selectedDate),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Icon(LucideIcons.chevronRight,
+                          color: cs.onSurfaceVariant),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              Text('Amount',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+
+              // Quick-add buttons
+              Row(
+                children: quickAmounts.map((amount) {
+                  final isActive =
+                      !useCustomAmount && selectedAmount == amount;
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: amount == quickAmounts.first ? 0 : 4,
+                        right: amount == quickAmounts.last ? 0 : 4,
+                      ),
+                      child: ChoiceChip(
+                        label: Text('${amount}ml'),
+                        selected: isActive,
+                        onSelected: (_) {
+                          setDialogState(() {
+                            useCustomAmount = false;
+                            selectedAmount = amount;
+                          });
+                        },
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 12),
+
+              // Custom amount field
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: 'Custom amount (ml)',
+                  prefixIcon: Icon(LucideIcons.droplet,
+                      size: 18, color: cs.primary),
+                  suffixText: 'ml',
+                ),
+                onChanged: (_) {
+                  setDialogState(() => useCustomAmount = true);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text('Cancel',
+                  style: TextStyle(color: cs.onSurfaceVariant)),
+            ),
+            FilledButton.icon(
+              icon: const Icon(LucideIcons.save, size: 18),
+              label: const Text('Save'),
+              onPressed: () async {
+                final amount = useCustomAmount
+                    ? int.tryParse(amountController.text) ?? 0
+                    : selectedAmount;
+
+                if (amount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Enter a valid amount'),
+                      backgroundColor: cs.error,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+
+                if (amount > AppConstants.maxPerEntryMl) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Max ${AppConstants.maxPerEntryMl}ml per entry'),
+                      backgroundColor: cs.error,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  final storage = ref.read(storageProvider);
+                  final entry = WaterEntry(
+                    timestamp: selectedDate,
+                    amountMl: amount,
+                  );
+                  await storage.addEntry(entry);
+
+                  // Refresh chart
+                  ref.invalidate(monthProvider(_currentMonth));
+
+                  // Also refresh today if the date is today
+                  if (DateUtilsApp.isSameDay(
+                      selectedDate, DateTime.now())) {
+                    ref.invalidate(todayProvider);
+                  }
+
+                  // Trigger streak and achievement recalculation
+                  await ref
+                      .read(streakProvider.notifier)
+                      .recalculate();
+                  await ref
+                      .read(achievementsProvider.notifier)
+                      .recalculate();
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Logged ${amount}ml for ${DateUtilsApp.formatDate(selectedDate)}',
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                  if (ctx.mounted) {
+                    Navigator.of(ctx).pop();
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to save: $e'),
+                        backgroundColor: cs.error,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+    amountController.dispose();
   }
 }
 
@@ -592,18 +698,10 @@ class _DailyNoteCardState extends ConsumerState<_DailyNoteCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final cs = theme.colorScheme;
     final note = ref.watch(noteProvider(widget.date));
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
+    return RainCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -612,15 +710,12 @@ class _DailyNoteCardState extends ConsumerState<_DailyNoteCard> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      colorScheme.primary,
-                      colorScheme.primary.withValues(alpha: 0.7),
-                    ],
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(
+                    AppDimensions.radiusMd,
                   ),
-                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(Icons.notes, color: Colors.white, size: 16),
+                child: Icon(LucideIcons.fileText, color: cs.primary, size: 16),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -633,8 +728,8 @@ class _DailyNoteCardState extends ConsumerState<_DailyNoteCard> {
               ),
               if (note.isNotEmpty && !_isEditing)
                 IconButton(
-                  icon: Icon(Icons.edit_outlined, size: 20,
-                      color: colorScheme.onSurfaceVariant),
+                  icon: Icon(LucideIcons.edit,
+                      size: 20, color: cs.onSurfaceVariant),
                   onPressed: () {
                     _noteController.text = note;
                     setState(() => _isEditing = true);
@@ -642,8 +737,8 @@ class _DailyNoteCardState extends ConsumerState<_DailyNoteCard> {
                 ),
               if (_isEditing)
                 IconButton(
-                  icon: Icon(Icons.close, size: 20,
-                      color: colorScheme.onSurfaceVariant),
+                  icon: Icon(LucideIcons.x,
+                      size: 20, color: cs.onSurfaceVariant),
                   onPressed: () {
                     _noteController.clear();
                     setState(() => _isEditing = false);
@@ -669,21 +764,43 @@ class _DailyNoteCardState extends ConsumerState<_DailyNoteCard> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed: () {
-                        _noteController.clear();
-                        ref.read(noteProvider(widget.date).notifier).deleteNote();
+                      onPressed: () async {
+                        try {
+                          await ref
+                              .read(noteProvider(widget.date).notifier)
+                              .deleteNote();
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content:
+                                    Text('Failed to delete note: $e'),
+                              ),
+                            );
+                          }
+                        }
                         setState(() => _isEditing = false);
                       },
-                      child: Text(
-                        'Delete',
-                        style: TextStyle(color: colorScheme.error),
-                      ),
+                      child: Text('Delete',
+                          style: TextStyle(color: cs.error)),
                     ),
                     const SizedBox(width: 8),
                     FilledButton(
-                      onPressed: () {
-                        ref.read(noteProvider(widget.date).notifier)
-                            .setNote(_noteController.text);
+                      onPressed: () async {
+                        try {
+                          await ref
+                              .read(noteProvider(widget.date).notifier)
+                              .setNote(_noteController.text);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content:
+                                    Text('Failed to save note: $e'),
+                              ),
+                            );
+                          }
+                        }
                         setState(() => _isEditing = false);
                       },
                       child: const Text('Save'),
@@ -696,7 +813,7 @@ class _DailyNoteCardState extends ConsumerState<_DailyNoteCard> {
             Text(
               note,
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+                color: cs.onSurfaceVariant,
                 height: 1.5,
               ),
             )
@@ -707,25 +824,24 @@ class _DailyNoteCardState extends ConsumerState<_DailyNoteCard> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(12),
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(
+                    AppDimensions.radiusLg,
+                  ),
                   border: Border.all(
-                    color: colorScheme.outlineVariant
-                        .withValues(alpha: 0.3),
-                    style: BorderStyle.solid,
+                    color: cs.outlineVariant.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.add_rounded, size: 18,
-                        color: colorScheme.onSurfaceVariant),
+                    Icon(LucideIcons.plus,
+                        size: 18, color: cs.onSurfaceVariant),
                     const SizedBox(width: 6),
                     Text(
                       'Add a note',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                        color: cs.onSurfaceVariant,
                       ),
                     ),
                   ],

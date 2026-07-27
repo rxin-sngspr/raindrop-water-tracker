@@ -21,12 +21,11 @@ class NotificationMessages {
   static const List<_NotificationPair> evening = [
     _NotificationPair('Evening check-in', 'How is your hydration today?'),
     _NotificationPair('You\'re doing great', 'Keep that water flowing!'),
-    _NotificationPair('Almost there', 'Finish the day strong — drink up!'),
+    _NotificationPair('Almost there', 'Finish the day strong - drink up!'),
     _NotificationPair('Hydration check', 'Don\'t let your water game slip this evening'),
     _NotificationPair('Wind down', 'Sip some water before you call it a night'),
   ];
 
-  /// Picks a random pair and returns (title, body) together
   static ({String title, String body}) pickPair(List<_NotificationPair> list) {
     final pair = list[Random().nextInt(list.length)];
     return (title: pair.title, body: pair.body);
@@ -48,31 +47,65 @@ class NotificationService {
   Future<void> init() async {
     if (_initialized || kIsWeb) return;
 
-    tz_data.initializeTimeZones();
+    try {
+      tz_data.initializeTimeZones();
 
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
 
-    const settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
+      const settings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
 
-    await _plugin!.initialize(settings, onDidReceiveNotificationResponse: (_) {});
-    _initialized = true;
+      final plugin = _plugin!;
+      await plugin.initialize(settings, onDidReceiveNotificationResponse: (response) {
+        debugPrint('Notification tapped: ${response.payload}');
+      });
+
+      await plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'hydration_reminder',
+          'Hydration Reminders',
+          description: 'Daily reminders to drink water',
+          importance: Importance.high,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
+
+      _initialized = true;
+    } catch (e) {
+      debugPrint('Notification init error: $e');
+    }
   }
 
   Future<void> requestPermissions() async {
     if (kIsWeb || _plugin == null) return;
-    final android = _plugin!.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    if (android != null) {
-      await android.requestNotificationsPermission();
+    try {
+      final plugin = _plugin;
+      final android = plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android != null) {
+        await android.requestNotificationsPermission();
+      }
+      final iosPlugin = plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      if (iosPlugin != null) {
+        await iosPlugin.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      }
+    } catch (e) {
+      debugPrint('Permission request error: $e');
     }
   }
 
@@ -82,44 +115,49 @@ class NotificationService {
     int id = 1,
   }) async {
     if (kIsWeb || _plugin == null) return;
-    await _plugin!.cancel(id);
+    try {
+      final plugin = _plugin;
+      await plugin.cancel(id);
 
-    final now = DateTime.now();
-    var scheduledDate = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      hour,
-      minute,
-    );
+      final now = DateTime.now();
+      var scheduledDate = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day,
+        hour,
+        minute,
+      );
 
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
-    }
+      if (scheduledDate.isBefore(now)) {
+        scheduledDate = scheduledDate.add(const Duration(days: 1));
+      }
 
-    final pair = NotificationMessages.pickPair(NotificationMessages.morning);
-    await _plugin!.zonedSchedule(
-      id,
-      pair.title,
-      pair.body,
-      scheduledDate,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'hydration_reminder',
-          'Hydration Reminders',
-          channelDescription: 'Daily reminders to drink water',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+      final pair = NotificationMessages.pickPair(NotificationMessages.morning);
+      await plugin.zonedSchedule(
+        id,
+        pair.title,
+        pair.body,
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'hydration_reminder',
+            'Hydration Reminders',
+            channelDescription: 'Daily reminders to drink water',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
+          iOS: DarwinNotificationDetails(),
         ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+    } catch (e) {
+      debugPrint('Schedule morning error: $e');
+    }
   }
 
   Future<void> scheduleMotivationalReminder({
@@ -128,47 +166,77 @@ class NotificationService {
     int id = 2,
   }) async {
     if (kIsWeb || _plugin == null) return;
-    await _plugin!.cancel(id);
+    try {
+      final plugin = _plugin;
+      await plugin.cancel(id);
 
-    final now = DateTime.now();
-    var scheduledDate = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      hour,
-      minute,
-    );
+      final now = DateTime.now();
+      var scheduledDate = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day,
+        hour,
+        minute,
+      );
 
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
-    }
+      if (scheduledDate.isBefore(now)) {
+        scheduledDate = scheduledDate.add(const Duration(days: 1));
+      }
 
-    final pair = NotificationMessages.pickPair(NotificationMessages.evening);
-    await _plugin!.zonedSchedule(
-      id,
-      pair.title,
-      pair.body,
-      scheduledDate,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'hydration_reminder',
-          'Hydration Reminders',
-          channelDescription: 'Daily reminders to drink water',
-          importance: Importance.defaultImportance,
-          priority: Priority.defaultPriority,
+      final pair = NotificationMessages.pickPair(NotificationMessages.evening);
+      await plugin.zonedSchedule(
+        id,
+        pair.title,
+        pair.body,
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'hydration_reminder',
+            'Hydration Reminders',
+            channelDescription: 'Daily reminders to drink water',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
         ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+    } catch (e) {
+      debugPrint('Schedule evening error: $e');
+    }
+  }
+
+  Future<void> sendTestNotification() async {
+    if (kIsWeb || _plugin == null) return;
+    try {
+      final plugin = _plugin;
+      await plugin.show(
+        999,
+        'Rain Drop is working!',
+        'Notifications are set up and ready.',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'hydration_reminder',
+            'Hydration Reminders',
+            channelDescription: 'Daily reminders to drink water',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Test notification error: $e');
+    }
   }
 
   Future<void> cancelAll() async {
     if (kIsWeb || _plugin == null) return;
-    await _plugin!.cancelAll();
+    final plugin = _plugin;
+    await plugin.cancelAll();
   }
 }
